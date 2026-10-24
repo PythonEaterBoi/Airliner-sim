@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>AIRLINER — python-rendered flight sim</title>
+<style>
+  :root{
+    --hud:#7dffb0; --hud2:#59d6ff; --warn:#ff4038; --caut:#ffb020; --dim:rgba(125,255,176,.55);
+    --panel:rgba(4,10,8,.62);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:#000;overscroll-behavior:none;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  #wrap{position:fixed;inset:0;background:#000}
+  canvas#view{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+    image-rendering:auto;background:#000}
+  #hud{position:absolute;inset:0;pointer-events:none;color:var(--hud);
+    text-shadow:0 0 6px rgba(0,0,0,.9),0 0 2px #000;font-size:12px;line-height:1.25}
+  .box{position:absolute;background:var(--panel);border:1px solid rgba(125,255,176,.35);
+    padding:2px 6px;border-radius:3px;white-space:nowrap}
+  .big{font-size:17px;font-weight:700}
+  #spd{left:calc(8px + env(safe-area-inset-left));top:50%;transform:translateY(-50%);text-align:right}
+  #alt{right:calc(8px + env(safe-area-inset-right));top:50%;transform:translateY(-50%)}
+  #hdg{left:50%;bottom:calc(6px + env(safe-area-inset-bottom));transform:translateX(-50%)}
+  #fma{left:50%;top:calc(6px + env(safe-area-inset-top));transform:translateX(-50%);letter-spacing:1px;color:var(--hud2);
+    border-color:rgba(89,214,255,.4)}
+  #warn{left:50%;top:34px;transform:translateX(-50%);font-size:20px;font-weight:800;
+    letter-spacing:3px;color:var(--warn);border:none;background:none;display:none}
+  #caut{left:50%;top:60px;transform:translateX(-50%);font-size:13px;color:var(--caut);
+    border:none;background:none;display:none;letter-spacing:2px}
+  #msg{left:50%;bottom:34px;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.45);
+    border:none;display:none;font-size:13px;letter-spacing:1px}
+  #eng{left:calc(8px + env(safe-area-inset-left));bottom:calc(6px + env(safe-area-inset-bottom))}
+  #cfg{right:calc(8px + env(safe-area-inset-right));bottom:calc(6px + env(safe-area-inset-bottom));text-align:right}
+  #adi{left:50%;top:50%;transform:translate(-50%,-50%);border:none;background:none}
+  #dev{right:74px;top:50%;transform:translateY(-50%);border:none;background:none}
+  #conn{left:50%;top:50%;transform:translate(-50%,-50%);font-size:14px;color:#9fd;
+    border:none;background:rgba(0,0,0,.5);padding:10px 16px}
+  /* ---- touch controls ---- */
+  #stick{position:absolute;left:0;bottom:0;width:46%;height:62%;pointer-events:auto}
+  #knob{position:absolute;width:86px;height:86px;border-radius:50%;
+    border:2px solid rgba(125,255,176,.5);background:rgba(125,255,176,.10);
+    left:16%;bottom:14%;display:none;pointer-events:none}
+  #thrwrap{position:absolute;right:calc(10px + env(safe-area-inset-right));top:16%;height:44%;width:44px;pointer-events:auto}
+  #thrtrack{position:absolute;inset:0;border:1px solid rgba(89,214,255,.45);border-radius:6px;
+    background:linear-gradient(to top,rgba(89,214,255,.10),rgba(89,214,255,.03))}
+  #thrfill{position:absolute;left:0;right:0;bottom:0;background:rgba(89,214,255,.28);border-radius:6px}
+  #thrlbl{position:absolute;left:0;right:0;top:-18px;text-align:center;color:var(--hud2);font-size:11px}
+  #rudwrap{position:absolute;right:calc(64px + env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom));width:150px;height:34px;pointer-events:auto}
+  #rudtrack{position:absolute;inset:0;border:1px solid rgba(255,176,32,.4);border-radius:6px}
+  #rudknob{position:absolute;top:2px;width:26px;height:28px;left:50%;margin-left:-13px;
+    background:rgba(255,176,32,.35);border-radius:5px}
+  #btns{position:absolute;left:calc(8px + env(safe-area-inset-left));top:calc(8px + env(safe-area-inset-top));display:flex;flex-wrap:wrap;gap:6px;
+    max-width:46%;pointer-events:auto}
+  #btns button, #menu button{
+    font:700 11px/1 ui-monospace,monospace;color:var(--hud);background:var(--panel);
+    border:1px solid rgba(125,255,176,.45);border-radius:5px;padding:7px 8px;min-width:44px;
+    letter-spacing:.5px}
+  #btns button.on{background:rgba(125,255,176,.28);color:#eafff2}
+  #btns button:active,#menu button:active{background:rgba(125,255,176,.4)}
+  #menu{position:absolute;inset:0;background:rgba(0,0,0,.82);color:var(--hud);
+    pointer-events:auto;display:none;padding:18px;overflow:auto;z-index:5}
+  #menu h2{font-size:14px;letter-spacing:2px;margin:10px 0 6px;color:var(--hud2)}
+  #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0}
+  #menu input[type=range]{width:70%}
+  #menu .hint{color:#8ab;font-size:11px;line-height:1.5;max-width:640px}
+  @media (orientation:portrait){
+    #rotate{display:flex}
+  }
+  #rotate{position:fixed;inset:0;background:#000;color:var(--hud);z-index:9;
+    display:none;align-items:center;justify-content:center;text-align:center;
+    font-size:15px;letter-spacing:2px;flex-direction:column;gap:10px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="view"></canvas>
+  <div id="hud">
+    <div class="box" id="fma">— — —</div>
+    <div id="warn">STALL</div>
+    <div id="caut"></div>
+    <div class="box big" id="spd">---<br><span style="font-size:11px">KT  M .--</span></div>
+    <div class="box big" id="alt">-----<br><span style="font-size:11px">FT  VS ----</span></div>
+    <div class="box" id="hdg">HDG ---</div>
+    <div class="box" id="eng">N1 --.-  THR --%</div>
+    <div class="box" id="cfg">FLAPS -  GEAR ●●●</div>
+    <svg id="adi" width="150" height="150" viewBox="-75 -75 150 150"></svg>
+    <svg id="dev" width="70" height="70" viewBox="-35 -35 70 70"></svg>
+    <div id="msg"></div>
+    <div id="conn">CONNECTING…</div>
+  </div>
+  <div id="stick"><div id="knob"></div></div>
+  <div id="thrwrap"><div id="thrlbl">THR</div><div id="thrtrack"><div id="thrfill"></div></div></div>
+  <div id="rudwrap"><div id="rudtrack"><div id="rudknob"></div></div></div>
+  <div id="btns">
+    <button id="b-gear">GEAR</button><button id="b-flapdn">FLAP+</button>
+    <button id="b-flapup">FLAP−</button><button id="b-spd">SPDBRK</button>
+    <button id="b-brk">BRK</button><button id="b-park">PARK</button>
+    <button id="b-ap">AP</button><button id="b-at">A/T</button><button id="b-app">APP</button>
+    <button id="b-trimdn">TRIM↓</button><button id="b-trimup">TRIM↑</button>
+    <button id="b-cam">CAM</button><button id="b-menu">MENU</button>
+  </div>
+  <div id="menu">
+    <h2>SITUATION</h2>
+    <div class="row">
+      <button data-sit="takeoff">TAKEOFF RWY27</button>
+      <button data-sit="approach">ILS FINAL RWY27</button>
+      <button data-sit="cruise">CRUISE FL240</button>
+      <button data-sit="pattern">PATTERN 1000FT</button>
+    </div>
+    <h2>TIME OF DAY</h2>
+    <div class="row"><input type="range" id="tod" min="0" max="1" step="0.01" value="0.62">
+      <span id="todlbl">day</span></div>
+    <h2>RENDER QUALITY (terrain detail)</h2>
+    <div class="row">
+      <button data-q="0.6">LOW</button><button data-q="1.0">MED</button><button data-q="1.25">HIGH</button>
+    </div>
+    <h2>RESOLUTION (manual override)</h2>
+    <div class="row"><button data-q2="-1">−</button><button data-q2="1">+</button>
+      <span id="reslbl" style="align-self:center"></span></div>
+    <h2>OPTIONS</h2>
+    <div class="row">
+      <button id="b-tilt">TILT-TO-FLY: OFF</button>
+      <button id="b-full">FULLSCREEN</button>
+      <button id="b-sound">SOUND: ON</button>
+    </div>
+    <h2>HOW TO FLY</h2>
+    <div class="hint">
+      Left thumb: drag anywhere on the left half = control column (roll/pitch).<br>
+      Right edge: vertical slider = thrust (drag below 0 for reverse on the ground).<br>
+      Orange slider = rudder / nose-wheel steering. TRIM relieves column force.<br>
+      Takeoff: thrust slider to 100 %, rotate at ~145 kt (pull stick down-back),
+      GEAR up at 400 ft, climb at 160–180 kt.<br>
+      Landing: join the ILS with APP (or hand-fly the approach lights), GEAR down by
+      1000 ft, flaps 15–30, ~130–140 kt, flare at 30 ft, idle, brakes + SPDBRK after touchdown.<br>
+      Keyboard: arrows fly (up = nose up), Q/E rudder, Shift/Ctrl thrust, G gear, F/R flaps,
+      S speedbrake, B brakes, V camera, A autopilot, Z autothrottle, X approach arm,
+      T trim, P park brake, M menu.<br>
+      Every pixel of the outside view is rendered in Python (numpy software rasteriser)
+      on the server and streamed to this device as JPEG.
+    </div>
+    <div class="row"><button id="b-close">CLOSE</button></div>
+  </div>
+  <div id="rotate">↻ ROTATE YOUR PHONE TO LANDSCAPE<br><span style="font-size:11px;color:#8ab">
+    (or tap to play anyway)</span></div>
+</div>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const cv=$("view"), ctx=cv.getContext("2d");
+let ws=null, bmp=null, pending=null, lastState=null, soundOn=true, tiltOn=false;
+let tiltRoll=0, tiltPitch=0;
+
+/* ---------------- audio ---------------- */
+let AC=null;
+function audio(){ if(!AC){ try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){} } 
+  if(AC&&AC.state==="suspended")AC.resume(); return AC; }
+function beep(f,d,type,g){ const a=audio(); if(!a||!soundOn)return;
+  const o=a.createOscillator(),v=a.createGain();
+  o.type=type||"square"; o.frequency.value=f; v.gain.value=g||0.06;
+  o.connect(v); v.connect(a.destination); o.start();
+  v.gain.setValueAtTime(g||0.06,a.currentTime);
+  v.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+d);
+  o.stop(a.currentTime+d); }
+let warnT=0;
+function warnSound(w){ const n=performance.now();
+  if(w.length&&n-warnT>700){ warnT=n; beep(w.includes("STALL")?440:880,0.18,"square",0.07);} }
+
+/* ---------------- websocket ---------------- */
+function connect(){
+  const proto=location.protocol==="https:"?"wss":"ws";
+  ws=new WebSocket(proto+"://"+location.host+"/ws");
+  ws.binaryType="arraybuffer";
+  ws.onopen=()=>{ $("conn").style.display="none"; };
+  ws.onclose=()=>{ $("conn").style.display="block"; $("conn").textContent="RECONNECTING…";
+    setTimeout(connect,1200); };
+  ws.onmessage=ev=>{
+    if(typeof ev.data==="string"){ lastState=JSON.parse(ev.data); hud(lastState); }
+    else { const b=ev.data;
+      if(pending===null){ pending=b; scheduleDraw(); } else pending=b; }
+  };
+}
+function scheduleDraw(){ if(bmp===undefined)return;
+  createImageBitmap(new Blob([pending],{type:"image/jpeg"})).then(b=>{
+    bmp=b; pending=null;
+    if(cv.width!==b.width||cv.height!==b.height){cv.width=b.width;cv.height=b.height;}
+  }).catch(()=>{pending=null;});
+}
+function frame(){ if(bmp){ ctx.drawImage(bmp,0,0,cv.width,cv.height); }
+  requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+
+/* ---------------- send helpers ---------------- */
+let sendT=0;
+function sendIn(){ const n=performance.now(); if(n-sendT<33||!ws||ws.readyState!==1)return; sendT=n;
+  let x=stick.x, y=stick.y;
+  if(tiltOn){ x=clamp(x+tiltRoll,-1,1); y=clamp(y+tiltPitch,-1,1); }
+  ws.send(JSON.stringify({t:"in",st:[x,y],pd:rud,th:thrVal,brk:brkVal})); }
+function cmd(k,v){ if(ws&&ws.readyState===1)ws.send(JSON.stringify({t:"cmd",k:k,v:v})); }
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+
+/* ---------------- HUD ---------------- */
+function hud(s){
+  $("spd").innerHTML=Math.round(s.ias)+"<br><span style='font-size:11px'>KT  M "+s.mach.toFixed(2)+"</span>";
+  $("alt").innerHTML=Math.round(s.alt)+"<br><span style='font-size:11px'>FT  VS "+
+    (s.vs>=0?"+":"")+Math.round(s.vs)+"</span>";
+  $("hdg").textContent="HDG "+String(Math.round(s.hdg)).padStart(3,"0")+
+    "  AGL "+Math.round(s.agl)+"FT";
+  $("eng").textContent="N1 "+s.n1.toFixed(1)+"  THR "+Math.round(s.thr)+"%  α "+s.alpha.toFixed(1);
+  const g=s.gear;
+  const gl=g>0.95?"●●●":(g<0.05?"○○○":"◐◐◐");
+  $("cfg").innerHTML="FLAPS "+s.flap+"  GEAR <span style='color:"+(g>0.95?"#7dffb0":(g<0.05?"#678":"#ffb020"))+
+    "'>"+gl+"</span>"+(s.spd>0.5?"  SPD▮":"")+(s.park>0.5?"  PARK":"")+(s.brk>0.1?"  BRK":"");
+  $("fma").textContent=(s.ap?"AP ":"  ")+(s.at?"A/T ":"    ")+(s.app?"APP ":"    ")+
+    s.rm+" / "+s.pm+(s.rm==="LOC"?"◆":"")+(s.pm==="GS"?"◆":"");
+  const w=s.warn||[];
+  $("warn").style.display=w.length?"block":"none";
+  $("warn").textContent=w[0]||"";
+  $("caut").style.display=w.length>1?"block":"none";
+  $("caut").textContent=w.slice(1).join("  ");
+  warnSound(w);
+  if(s.touch>50){ showMsg("TOUCHDOWN  "+Math.round(s.touch)+" FPM "+
+    (s.touch>600?"HARD!":(s.touch>350?"FIRM":"NICE")),3500); }
+  $("reslbl").textContent=s.res[0]+"×"+s.res[1]+"  "+s.fps+"fps  "+s.tris+"tri";
+  drawADI(s); drawDEV(s);
+  $("thrfill").style.height=(clamp(s.thr,0,100))+"%";
+}
+let msgT=0;
+function showMsg(t,ms){ const m=$("msg"); m.textContent=t; m.style.display="block";
+  clearTimeout(msgT); msgT=setTimeout(()=>m.style.display="none",ms||2500); }
+function drawADI(s){
+  const r=s.roll*Math.PI/180, p=s.pitch;
+  const svg=$("adi");
+  const g=6, sky="#2a6db5", gnd="#8a5a2b";
+  let h="";
+  h+="<clipPath id='c'><circle r='52'/></clipPath>";
+  h+="<g clip-path='url(#c)'><g transform='rotate("+(-s.roll)+" ) translate(0 "+(p*g)+")'>";
+  h+="<rect x='-90' y='-120' width='180' height='120' fill='"+sky+"'/>";
+  h+="<rect x='-90' y='0' width='180' height='120' fill='"+gnd+"'/>";
+  h+="<line x1='-90' y1='0' x2='90' y2='0' stroke='#fff' stroke-width='1.5'/>";
+  for(let d=-20;d<=20;d+=10){ if(!d)continue;
+    h+="<line x1='-18' y1='"+(d*g)+"' x2='18' y2='"+(d*g)+"' stroke='#fff' stroke-width='1'/>";
+    h+="<text x='22' y='"+(d*g+3)+"' fill='#fff' font-size='8'>"+Math.abs(d)+"</text>"; }
+  h+="</g></g>";
+  h+="<circle r='52' fill='none' stroke='rgba(125,255,176,.5)'/>";
+  h+="<path d='M -30 0 L -10 0 L 0 8 L 10 0 L 30 0' stroke='#ffb020' fill='none' stroke-width='2.5'/>";
+  h+="<g transform='rotate("+(-s.roll)+")'>"+
+     "<line x1='0' y1='-52' x2='0' y2='-44' stroke='#7dffb0' stroke-width='2'/>"+
+     "<path d='M -34 -46 L -26 -46 L -30 -40 Z' fill='#7dffb0'/></g>";
+  svg.innerHTML=h;
+}
+function drawDEV(s){
+  const svg=$("dev");
+  const lx=clamp(s.loc,-2,2)*13, gy=clamp(s.gs,-2,2)*13;
+  let h="<circle r='30' fill='none' stroke='rgba(125,255,176,.25)'/>";
+  for(let i=-2;i<=2;i++){ if(!i)continue;
+    h+="<circle cx='"+(i*13)+"' cy='0' r='2' fill='rgba(125,255,176,.35)'/>";
+    h+="<circle cx='0' cy='"+(i*13)+"' r='2' fill='rgba(125,255,176,.35)'/>"; }
+  h+="<circle cx='"+lx+"' cy='0' r='3.4' fill='#ffb020'/>";
+  h+="<circle cx='0' cy='"+gy+"' r='3.4' fill='#ffb020'/>";
+  svg.innerHTML=h;
+}
+
+/* ---------------- stick ---------------- */
+const stick={x:0,y:0,id:null,ox:0,oy:0};
+const st=$("stick"), knob=$("knob");
+st.addEventListener("pointerdown",e=>{ audio();
+  stick.id=e.pointerId; stick.ox=e.clientX; stick.oy=e.clientY;
+  knob.style.display="block"; moveKnob(e.clientX,e.clientY); st.setPointerCapture(e.pointerId); e.preventDefault(); });
+st.addEventListener("pointermove",e=>{ if(e.pointerId!==stick.id)return;
+  const dx=e.clientX-stick.ox, dy=e.clientY-stick.oy;
+  stick.x=clamp(dx/70,-1,1); stick.y=clamp(dy/70,-1,1);
+  moveKnob(e.clientX,e.clientY); sendIn(); e.preventDefault(); });
+function endStick(e){ if(e.pointerId!==stick.id)return; stick.id=null; stick.x=0; stick.y=0;
+  knob.style.display="none"; sendIn(); }
+st.addEventListener("pointerup",endStick); st.addEventListener("pointercancel",endStick);
+function moveKnob(x,y){ knob.style.left=(x-43)+"px"; knob.style.top=(y-43)+"px";
+  knob.style.position="fixed"; }
+
+/* ---------------- throttle + rudder ---------------- */
+let thrVal=0.42, rud=0, brkVal=0;
+const tw=$("thrwrap");
+function thrFrom(e){ const r=tw.getBoundingClientRect();
+  thrVal=clamp(1-(e.clientY-r.top)/r.height,0,1); sendIn(); }
+tw.addEventListener("pointerdown",e=>{audio();tw.setPointerCapture(e.pointerId);thrFrom(e);e.preventDefault();});
+tw.addEventListener("pointermove",e=>{ if(e.buttons||e.pointerType==="touch")thrFrom(e); });
+tw.addEventListener("dblclick",()=>{ thrVal=0; sendIn(); });
+const rw=$("rudwrap");
+function rudFrom(e){ const r=rw.getBoundingClientRect();
+  rud=clamp(((e.clientX-r.left)/r.width-0.5)*2.4,-1,1);
+  $("rudknob").style.left=(50+rud*38)+"%"; sendIn(); }
+rw.addEventListener("pointerdown",e=>{rw.setPointerCapture(e.pointerId);rudFrom(e);e.preventDefault();});
+rw.addEventListener("pointermove",e=>{ if(e.buttons||e.pointerType==="touch")rudFrom(e); });
+rw.addEventListener("pointerup",()=>{ rud=0; $("rudknob").style.left="50%"; sendIn(); });
+
+/* ---------------- buttons ---------------- */
+function btn(id,k,v){ $(id).addEventListener("click",e=>{audio();cmd(k,v);e.preventDefault();}); }
+btn("b-gear","gear"); btn("b-flapdn","flapdn"); btn("b-flapup","flapup");
+btn("b-spd","spd"); btn("b-park","park"); btn("b-ap","ap"); btn("b-at","at");
+btn("b-app","app"); btn("b-cam","cam");
+btn("b-trimup","trim",-0.03); btn("b-trimdn","trim",0.03);
+let brkHold=false;
+$("b-brk").addEventListener("pointerdown",e=>{audio();brkVal=1;sendIn();brkHold=true;e.preventDefault();});
+$("b-brk").addEventListener("pointerup",()=>{brkVal=0;brkHold=false;sendIn();});
+$("b-brk").addEventListener("pointercancel",()=>{brkVal=0;brkHold=false;sendIn();});
+$("b-menu").addEventListener("click",()=>{audio();$("menu").style.display="block";});
+$("b-close").addEventListener("click",()=>$("menu").style.display="none");
+document.querySelectorAll("#menu [data-sit]").forEach(b=>b.addEventListener("click",()=>{
+  cmd("sit",b.dataset.sit); $("menu").style.display="none"; showMsg("SITUATION: "+b.textContent,2000);}));
+document.querySelectorAll("#menu [data-q]").forEach(b=>b.addEventListener("click",()=>cmd("qual",b.dataset.q)));
+document.querySelectorAll("#menu [data-q2]").forEach(b=>b.addEventListener("click",()=>cmd("q",parseInt(b.dataset.q2))));
+$("tod").addEventListener("input",e=>{cmd("tod",parseFloat(e.target.value));
+  const t=parseFloat(e.target.value);
+  $("todlbl").textContent=(t<0.22||t>0.80)?"night":(t<0.32||t>0.70)?"dawn/dusk":"day";});
+$("b-tilt").addEventListener("click",async e=>{
+  if(!tiltOn){ if(typeof DeviceOrientationEvent!=="undefined"&&DeviceOrientationEvent.requestPermission){
+      try{ const r=await DeviceOrientationEvent.requestPermission(); if(r!=="granted")return; }catch(err){return;} } }
+  tiltOn=!tiltOn; e.target.textContent="TILT-TO-FLY: "+(tiltOn?"ON":"OFF"); });
+window.addEventListener("deviceorientation",e=>{ if(!tiltOn)return;
+  if(e.gamma===null)return;
+  tiltRoll=clamp((e.gamma)/38,-1,1); tiltPitch=clamp(((e.beta||40)-42)/30,-1,1); });
+$("b-full").addEventListener("click",()=>{ const el=document.documentElement;
+  if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el); }
+  else document.exitFullscreen(); });
+$("b-sound").addEventListener("click",e=>{soundOn=!soundOn;e.target.textContent="SOUND: "+(soundOn?"ON":"OFF");});
+$("rotate").addEventListener("click",()=>$("rotate").style.display="none");
+
+/* ---------------- keyboard ---------------- */
+const keys={};
+addEventListener("keydown",e=>{ audio(); keys[e.code]=1;
+  const m={KeyG:"gear",KeyF:"flapdn",KeyS:"spd",KeyV:"cam",KeyP:"park",KeyB:null,KeyT:null};
+  if(e.code==="KeyG")cmd("gear"); if(e.code==="KeyF")cmd("flapdn");
+  if(e.code==="KeyR")cmd("flapup"); if(e.code==="KeyS")cmd("spd");
+  if(e.code==="KeyV")cmd("cam"); if(e.code==="KeyP")cmd("park");
+  if(e.code==="KeyA")cmd("ap"); if(e.code==="KeyZ")cmd("at"); if(e.code==="KeyX")cmd("app");
+  if(e.code==="KeyB"){brkVal=1;} if(e.code==="KeyT"){cmd("trim",-0.03);}
+  if(e.code==="KeyM")$("menu").style.display=$("menu").style.display==="block"?"none":"block";
+  e.preventDefault(); });
+addEventListener("keyup",e=>{ keys[e.code]=0; if(e.code==="KeyB")brkVal=0; });
+setInterval(()=>{ if(document.activeElement&&document.activeElement.tagName==="INPUT")return;
+  let x=0,y=0,r=0;
+  if(keys.ArrowLeft)x-=1; if(keys.ArrowRight)x+=1;
+  if(keys.ArrowUp||keys.KeyW)y+=1; if(keys.ArrowDown)y-=1;
+  if(keys.KeyQ)r-=1; if(keys.KeyE)r+=1;
+  if(stick.id===null){ stick.x=x; stick.y=y; rud=r*0.6;
+    $("rudknob").style.left=(50+rud*38)+"%"; }
+  if(keys.ShiftLeft||keys.ShiftRight)thrVal=clamp(thrVal+0.02,0,1);
+  if(keys.ControlLeft||keys.ControlRight)thrVal=clamp(thrVal-0.02,-0.45,1);
+  sendIn(); },40);
+
+connect();
+</script>
+</body>
+</html>
